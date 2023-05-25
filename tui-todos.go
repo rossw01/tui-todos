@@ -1,6 +1,8 @@
 package main
 
 import (
+  "fmt"
+  "bufio"
 	"log"
   "strconv"
   "strings"
@@ -55,6 +57,34 @@ func createDirIfNotExists() {
 	}
 }
 
+func loadTasks() ([]string, error) {
+  homeDir, err := os.UserHomeDir()
+  if err != nil {
+    fmt.Println("Error getting home dir:", err)
+    return nil, err
+  }
+
+  filePath := filepath.Join(homeDir, todosDir, tasksFileName)
+  file, err := os.Open(filePath)
+  if err != nil {
+    fmt.Println("Error opening file:", err)
+    return nil, err
+  }
+  defer file.Close()
+
+  scanner := bufio.NewScanner(file)
+  var lines []string
+
+  for scanner.Scan() {
+    lines = append(lines, scanner.Text())
+  }
+  if err := scanner.Err(); err != nil {
+    return nil, err
+  }
+
+  return lines, nil
+}
+
 func main() {
 	if err := ui.Init(); err != nil {
 		log.Fatalf("failed to initialize termui: %v", err)
@@ -65,25 +95,15 @@ func main() {
 
 	tasks := widgets.NewList()
   tasks.Title = "Tasks:"
-	tasks.Rows = []string{
-  // These will be removed soon, since next step is implementing reading from file
-	"[0] test0",
-	"[1] [test1](fg:blue)",
-	"[2] [test2](fg:red)",
-	"[3] [test3](fg:white) output",
-	"[4] go to shop",
-	"[5] buy loads of eggs",
-	"[6] make massive omlette",
-	"[7] consume",
-	"[8] do dishes",
-	"[9] grow big muscles from the protein",
-	"[10] ???",
-	"[11] profit",
-	}
 
   createDirIfNotExists()
-  // saveTasksToFile(tasks)
-  // tasks.Rows = loadTasksFromFile("~/.todos/tasks.txt")
+
+  todoItems, err := loadTasks()
+  if err != nil {
+    fmt.Println("Error loading tasks:", err)
+    return
+  }
+  tasks.Rows = todoItems
 
 	tasks.TextStyle = ui.NewStyle(ui.ColorYellow)
 	tasks.WrapText = true; 
