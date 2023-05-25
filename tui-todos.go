@@ -8,6 +8,7 @@ import (
   "strings"
   "os"
   "path/filepath"
+  "regexp"
 
 	ui "github.com/gizak/termui/v3"
 	"github.com/gizak/termui/v3/widgets"
@@ -18,7 +19,18 @@ const (
 	tasksFileName = "tasks.txt"
 )
 
-var initialTasks = []string{
+var fontColours = []string {
+  "(fg:red)",
+  "(fg:green)",
+  "(fg:yellow)",
+  "(fg:blue)",
+  "(fg:magenta)",
+  "(fg:cyan)",
+  "(fg:white)",
+  "(fg:default)",
+}
+
+var initialTasks = []string {
 	"[0] test0",
 	"[1] [test1](fg:blue)",
 	"[2] [test2](fg:red)",
@@ -89,6 +101,42 @@ func loadTasks() ([]string, error) {
   }
 
   return lines, nil //returs []string containing lines from Todo-list file
+}
+
+func getMatchedColour(selectedRow string) ([][]string) {
+  regex := regexp.MustCompile(`\(fg.*?\)`)
+  return regex.FindAllStringSubmatch(selectedRow, -1) // Find final regex string match
+}
+
+func cycleColour(selectedRow string) (string) {
+  matches := getMatchedColour(selectedRow)
+
+  if len(matches) > 0 {
+    matchedColour := matches[len(matches) - 1][0] // Get last regex match
+		selectedRowWithoutColour := strings.Replace(selectedRow, matchedColour, "", -1)
+
+    fontColoursIndex := 0
+
+    for i, s := range fontColours {
+      if strings.Contains(s, matchedColour) {
+        fontColoursIndex = i
+        break
+      }
+    }
+
+    if fontColoursIndex >= len(fontColours) - 1 {
+      fontColoursIndex = 0
+    } else {
+      fontColoursIndex++
+    }
+    return selectedRowWithoutColour + fontColours[fontColoursIndex]
+  } else {
+    // Since there's no colour appended to the end, just append 1st fontColour and return
+    leftBracketIndex := strings.Index(selectedRow, "]")
+    modifiedStr := selectedRow[:leftBracketIndex + 2] +
+      "[" + selectedRow[leftBracketIndex + 2:]
+    return modifiedStr + "]" + fontColours[0]
+  }
 }
 
 func main() {
@@ -199,6 +247,10 @@ func main() {
         if len(tasks.Rows) > 0 {
           tasks.ScrollUp()
         }
+      case "<Tab>":
+        if len(tasks.Rows) > 0 {
+          tasks.Rows[tasks.SelectedRow] = cycleColour(tasks.Rows[tasks.SelectedRow])
+        }
       case "<C-d>":
         if len(tasks.Rows) > 0 {
           tasks.ScrollHalfPageDown()
@@ -245,7 +297,6 @@ func main() {
     } else {
       // Add-task window inputs
       switch e.ID {
-
         case "<Escape>":
           if newTaskOpen {
             newTask.Text = ""
