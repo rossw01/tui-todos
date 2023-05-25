@@ -36,35 +36,42 @@ var initialTasks = []string{
 func createDirIfNotExists() {
 	homeDir, _ := os.UserHomeDir()
 
-  // Create ~/.todos/ if it's the first time setup
-	todosDirPath := filepath.Join(homeDir, todosDir)
+	todosDirPath := filepath.Join(homeDir, todosDir) // Create ~/.todos/ (first time setup)
 	_, err := os.Stat(todosDirPath)
 	if os.IsNotExist(err) {
 		_ = os.Mkdir(todosDirPath, 0700)
 	}
 
-  // Create ~/.todos/tasks.txt and populate with
-  // dummy data if it's the first time setup
-	tasksFilePath := filepath.Join(todosDirPath, tasksFileName)
+	tasksFilePath := filepath.Join(todosDirPath, tasksFileName) 
 	_, err = os.Stat(tasksFilePath)
 	if os.IsNotExist(err) {
-		file, _ := os.Create(tasksFilePath)
+		file, _ := os.Create(tasksFilePath) // Create tasks.txt
 		defer file.Close()
 
-		for _, task := range initialTasks {
-			_, _ = file.WriteString(task + "\n")
+		for _, task := range initialTasks { 
+			_, _ = file.WriteString(task + "\n") // Populate with dummy data
 		}
 	}
 }
 
+func saveTasks(tasks []string) {
+  homeDir, _ := os.UserHomeDir() 
+  filePath := filepath.Join(homeDir, todosDir, tasksFileName)
+  file, _ := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+
+  for _, task := range tasks {
+    _, _ = file.WriteString(task + "\n")
+  }
+}
+
 func loadTasks() ([]string, error) {
-  homeDir, err := os.UserHomeDir()
+  homeDir, err := os.UserHomeDir() 
   if err != nil {
     fmt.Println("Error getting home dir:", err)
     return nil, err
   }
 
-  filePath := filepath.Join(homeDir, todosDir, tasksFileName)
+  filePath := filepath.Join(homeDir, todosDir, tasksFileName) // Build filepath
   file, err := os.Open(filePath)
   if err != nil {
     fmt.Println("Error opening file:", err)
@@ -72,9 +79,8 @@ func loadTasks() ([]string, error) {
   }
   defer file.Close()
 
-  scanner := bufio.NewScanner(file)
+  scanner := bufio.NewScanner(file) // Read lines from file, store in lines variable
   var lines []string
-
   for scanner.Scan() {
     lines = append(lines, scanner.Text())
   }
@@ -82,7 +88,7 @@ func loadTasks() ([]string, error) {
     return nil, err
   }
 
-  return lines, nil
+  return lines, nil //returs []string containing lines from Todo-list file
 }
 
 func main() {
@@ -95,6 +101,9 @@ func main() {
 
 	tasks := widgets.NewList()
   tasks.Title = "Tasks:"
+  newTaskOpen := false // Used to check which inputs should be handled
+	previousKey := "" // This is used for 'gg' binding for jumping to the first item
+	uiEvents := ui.PollEvents()
 
   createDirIfNotExists()
 
@@ -105,24 +114,19 @@ func main() {
   }
   tasks.Rows = todoItems
 
+  // Task Window Styling
 	tasks.TextStyle = ui.NewStyle(ui.ColorYellow)
 	tasks.WrapText = true; 
   tasks.SelectedRowStyle = ui.NewStyle(ui.ColorBlack, ui.ColorWhite)
 	tasks.SetRect(0, 0, termWidth, termHeight)
 
-
   newTask := widgets.NewParagraph()
+  // New Task Window Styling
   newTask.Title = "Create a new task"
   newTask.Text = ""
 	tasks.WrapText = true 
   newTaskHeight := 4
   newTask.SetRect(0, termHeight - newTaskHeight, termWidth, termHeight)
-
-	ui.Render(tasks)
-
-  newTaskOpen := false
-	previousKey := ""
-	uiEvents := ui.PollEvents()
 
   var openAddTask = func() {
     tasks.SetRect(0, 0, termWidth, termHeight - newTaskHeight)
@@ -169,15 +173,13 @@ func main() {
     }
   }
 
-
-  // First renderer
-  ui.Render(tasks)
+  ui.Render(tasks) // Initial UI render
 
   // Input handling
 	for {
 		e := <-uiEvents
 
-    // Global Input handler
+    // Global Inputs
     switch e.ID {
       case "<C-c>": // You should always be able to close the program at any time
         return      // with <C-c>
@@ -185,7 +187,7 @@ func main() {
 
     if !newTaskOpen {
 
-      // Input handler for 'tasks'
+      // Task-view Inputs
       switch e.ID {
       case "q", "<C-c>": // I find it annoying if the same key to exit text input mode
         return           // is the same as the key used to close the program.
@@ -213,6 +215,8 @@ func main() {
         if len(tasks.Rows) > 0 {
           tasks.ScrollPageUp()
         }
+      case "w":
+        saveTasks(tasks.Rows)
       case "g":
         if previousKey == "g" {
           if len(tasks.Rows) > 0 {
@@ -232,17 +236,14 @@ func main() {
       case "d", "x":
         removeTask();
       }
-
-
       // used to help check for "gg"
       if previousKey == "g" {
         previousKey = ""
       } else {
         previousKey = e.ID
       }
-
     } else {
-      // Input handler for inside 'AddTask'
+      // Add-task window inputs
       switch e.ID {
 
         case "<Escape>":
