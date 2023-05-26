@@ -17,6 +17,7 @@ import (
 const (
 	todosDir      = ".todos"
 	tasksFileName = "tasks.txt"
+  defaultNewTaskText = "[ ](bg:white)"
 )
 
 var fontColours = []string {
@@ -139,6 +140,22 @@ func cycleColour(selectedRow string) (string) {
   }
 }
 
+func removeCursor(inputtedText string) (string) {
+  pattern := regexp.MustCompile(`\[[^\]]*\]\(bg:white\)`)
+  match := pattern.FindStringSubmatchIndex(inputtedText)
+  charToPreserve := inputtedText[match[0] + 1]
+  return inputtedText[:match[0]] + string(charToPreserve) + inputtedText[match[1]:]
+}
+
+func moveCursor(inputtedText string, indexOfNextChar int) (string) {
+  // this is insane
+  // How can there be no built in TextInput widget built into termui?
+  // Theres literally a pull request for it that's been sat there for 6+ years lol
+  // why do i have to make this schizo madman function
+  newString := removeCursor(inputtedText)
+  return newString[:indexOfNextChar] + "[" + string(newString[indexOfNextChar]) + "](bg:white)" + newString[indexOfNextChar + 1:]
+}
+
 func main() {
 	if err := ui.Init(); err != nil {
 		log.Fatalf("failed to initialize termui: %v", err)
@@ -152,6 +169,7 @@ func main() {
   newTaskOpen := false // Used to check which inputs should be handled
 	previousKey := "" // This is used for 'gg' binding for jumping to the first item
   newTaskIndex := 0 // 0 -> Below, -1 -> Above
+  cursorIndex := 0
 	uiEvents := ui.PollEvents()
 
   createDirIfNotExists()
@@ -172,20 +190,20 @@ func main() {
   newTask := widgets.NewParagraph()
   // New Task Window Styling
   newTask.Title = "Create a new task"
-  newTask.Text = ""
+  newTask.Text = defaultNewTaskText 
 	tasks.WrapText = true 
   newTaskHeight := 4
   newTask.SetRect(0, termHeight - newTaskHeight, termWidth, termHeight)
 
   var openAddTask = func() {
     tasks.SetRect(0, 0, termWidth, termHeight - newTaskHeight)
-    ui.Render(tasks, newTask)
+    ui.Render(tasks, newTask) // Test if this can be removed
     newTaskOpen = true
   }
 
   var closeAddTask = func() {
     tasks.SetRect(0, 0, termWidth, termHeight)
-    ui.Render(tasks)
+    ui.Render(tasks) // Test if this can be removed
     newTaskOpen = false
   }
 
@@ -206,18 +224,19 @@ func main() {
     }
   }
 
-  var insertTask = func(offset int) {
+  var insertTask = func(offset int) { 
+  // Offset is for placing new task above/below the currently selected item
     if len(newTask.Text) > 0 {
       index := tasks.SelectedRow
       if len(tasks.Rows) == 0 {
         tasks.Rows = []string{"[0] " + newTask.Text}
-        newTask.Text = ""
+        newTask.Text = defaultNewTaskText
         closeAddTask()
       } else {
-        task := "[" + strconv.Itoa(index + 1 + offset) + "] " + newTask.Text
-        tasks.Rows = append(tasks.Rows[:index+1 + offset], append([]string{task}, tasks.Rows[index + 1 + offset:]...)...)
+        task := "[" + strconv.Itoa(index + 1 + offset) + "] " + removeCursor(newTask.Text)
+        tasks.Rows = append(tasks.Rows[:index + 1 + offset], append([]string{task}, tasks.Rows[index + 1 + offset:]...)...)
       }
-      newTask.Text = ""
+      newTask.Text = defaultNewTaskText
       updateStringIndex(index + 1 + offset) // Not sure if doing the +1 is an optimisation or a slowdown lol
     }
   }
@@ -301,29 +320,46 @@ func main() {
       switch e.ID {
         case "<Escape>":
           if newTaskOpen {
-            newTask.Text = ""
+            newTask.Text = defaultNewTaskText
             closeAddTask();
+            cursorIndex = 0
           }
         case "<Backspace>":
-          if len(newTask.Text) > 0 {
-            newTask.Text = newTask.Text[:len(newTask.Text)-1]
-            ui.Render(newTask)
+          if len(newTask.Text) > len(defaultNewTaskText) && cursorIndex > 0 {
+            newTask.Text = newTask.Text[:cursorIndex - 1] + newTask.Text[cursorIndex:]
+            if cursorIndex > 0 { cursorIndex-- }
           }
         case "<Space>":
-          newTask.Text += " "
-          ui.Render(newTask)
-        case "<S-Space>": // This one isn't working, shift space still closes newTask
-          newTask.Text += " "
-          ui.Render(newTask)
+          newTask.Text = newTask.Text[:cursorIndex] + " " + newTask.Text[cursorIndex:]
+          cursorIndex++
+        case "<S-Space>": // This one isn't working in some terminals
+          newTask.Text = newTask.Text[:cursorIndex] + " " + newTask.Text[cursorIndex:]
+          cursorIndex++
         case "<Enter>":
-          if len(newTask.Text) > 0 {
+          if len(newTask.Text) > len(defaultNewTaskText) {
             insertTask(newTaskIndex);
             closeAddTask()
+            cursorIndex = 0
           }
+        case "<Left>":
+          if len(newTask.Text) > len(defaultNewTaskText) && cursorIndex > 0 {
+            newTask.Text = moveCursor(newTask.Text, cursorIndex - 1);
+            if cursorIndex > 0 { cursorIndex-- }
+          }
+        case "<Right>":
+          if len(newTask.Text) > len(defaultNewTaskText) && cursorIndex < (len(newTask.Text) - len(defaultNewTaskText)) {
+            newTask.Text = moveCursor(newTask.Text, cursorIndex + 1);
+            if cursorIndex < (len(newTask.Text) - len(defaultNewTaskText)) {
+              cursorIndex++
+            }
+          } 
         default:
-          newTask.Text += e.ID
-          ui.Render(newTask)
+          if len(string(e.ID)) == 1 { // Gets rid of things like <End> being inserted and breaking everything
+            newTask.Text = newTask.Text[:cursorIndex] + string(e.ID) + newTask.Text[cursorIndex:]
+            cursorIndex++
+          }
       }
+      ui.Render(newTask)
     }
     ui.Render(tasks)
   }
