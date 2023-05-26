@@ -151,6 +151,7 @@ func main() {
   tasks.Title = "Tasks:"
   newTaskOpen := false // Used to check which inputs should be handled
 	previousKey := "" // This is used for 'gg' binding for jumping to the first item
+  newTaskIndex := 0 // 0 -> Below, -1 -> Above
 	uiEvents := ui.PollEvents()
 
   createDirIfNotExists()
@@ -205,7 +206,7 @@ func main() {
     }
   }
 
-  var insertTask = func() {
+  var insertTask = func(offset int) {
     if len(newTask.Text) > 0 {
       index := tasks.SelectedRow
       if len(tasks.Rows) == 0 {
@@ -213,11 +214,11 @@ func main() {
         newTask.Text = ""
         closeAddTask()
       } else {
-        task := "[" + strconv.Itoa(index+1) + "] " + newTask.Text
-        tasks.Rows = append(tasks.Rows[:index+1], append([]string{task}, tasks.Rows[index+1:]...)...)
+        task := "[" + strconv.Itoa(index + 1 + offset) + "] " + newTask.Text
+        tasks.Rows = append(tasks.Rows[:index+1 + offset], append([]string{task}, tasks.Rows[index + 1 + offset:]...)...)
       }
       newTask.Text = ""
-      updateStringIndex(index + 1) // Not sure if doing the +1 is an optimisation or a slowdown lol
+      updateStringIndex(index + 1 + offset) // Not sure if doing the +1 is an optimisation or a slowdown lol
     }
   }
 
@@ -226,15 +227,12 @@ func main() {
   // Input handling
 	for {
 		e := <-uiEvents
-
     // Global Inputs
     switch e.ID {
       case "<C-c>": // You should always be able to close the program at any time
         return      // with <C-c>
     } // First renderer
-
     if !newTaskOpen {
-
       // Task-view Inputs
       switch e.ID {
       case "q", "<C-c>": // I find it annoying if the same key to exit text input mode
@@ -283,7 +281,11 @@ func main() {
         if len(tasks.Rows) > 0 {
           tasks.ScrollBottom()
         }
-      case "a", "i":
+      case "a", "i", "o":
+        newTaskIndex = 0;
+        openAddTask();
+      case "O":
+        newTaskIndex = -1;
         openAddTask();
       case "d", "x":
         removeTask();
@@ -315,7 +317,7 @@ func main() {
           ui.Render(newTask)
         case "<Enter>":
           if len(newTask.Text) > 0 {
-            insertTask();
+            insertTask(newTaskIndex);
             closeAddTask()
           }
         default:
