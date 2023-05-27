@@ -20,6 +20,18 @@ const (
   defaultNewTaskText = "[ ](bg:white)"
 )
 
+const (
+  helpWindowText =  `
+    [a/i/o] Create new task below currently selected task
+    [O] Create new task above currently selected task
+    [x/d] Delete currently selected task
+    [w] Write changes
+    [Tab] Cycle text colour of currently selected task
+    [q/C-c] Quit program
+    [Escape] Cancel new task creation
+    [Escape] Close help window
+  `
+)
 var fontColours = []string {
   "(fg:red)",
   "(fg:green)",
@@ -156,6 +168,28 @@ func moveCursor(inputtedText string, indexOfNextChar int) (string) {
   return newString[:indexOfNextChar] + "[" + string(newString[indexOfNextChar]) + "](bg:white)" + newString[indexOfNextChar + 1:]
 }
 
+func openHelp(termWidth int, termHeight int, helpWindow *widgets.Paragraph) {
+  helpWindow.SetRect(termWidth / 8, termHeight / 8, (termWidth / 8) * 7, (termHeight / 8) * 7 )
+  ui.Render(helpWindow)
+}
+
+func closeHelp(helpWindow *widgets.Paragraph) {
+  helpWindow.SetRect(0,0,0,0)
+  ui.Render(helpWindow)
+}
+  
+  // var openAddTask = func() {
+  //   tasks.SetRect(0, 0, termWidth, termHeight - newTaskHeight)
+  //   ui.Render(tasks, newTask) // Test if this can be removed
+  //   newTaskOpen = true
+  // }
+  //
+  // var closeAddTask = func() {
+  //   tasks.SetRect(0, 0, termWidth, termHeight)
+  //   ui.Render(tasks) // Test if this can be removed
+  //   newTaskOpen = false
+  // }
+
 func main() {
 	if err := ui.Init(); err != nil {
 		log.Fatalf("failed to initialize termui: %v", err)
@@ -164,8 +198,6 @@ func main() {
 
   termWidth, termHeight := ui.TerminalDimensions()
 
-	tasks := widgets.NewList()
-  tasks.Title = "Tasks:"
   newTaskOpen := false // Used to check which inputs should be handled
 	previousKey := "" // This is used for 'gg' binding for jumping to the first item
   newTaskIndex := 0 // 0 -> Below, -1 -> Above
@@ -179,31 +211,34 @@ func main() {
     fmt.Println("Error loading tasks:", err)
     return
   }
+	tasks := widgets.NewList()
+  tasks.Title = "Tasks: "
   tasks.Rows = todoItems
-
-  // Task Window Styling
 	tasks.TextStyle = ui.NewStyle(ui.ColorYellow)
 	tasks.WrapText = true; 
   tasks.SelectedRowStyle = ui.NewStyle(ui.ColorBlack, ui.ColorWhite)
 	tasks.SetRect(0, 0, termWidth, termHeight)
+	tasks.WrapText = true 
 
   newTask := widgets.NewParagraph()
-  // New Task Window Styling
   newTask.Title = "Create a new task"
   newTask.Text = defaultNewTaskText 
-	tasks.WrapText = true 
   newTaskHeight := 4
   newTask.SetRect(0, termHeight - newTaskHeight, termWidth, termHeight)
 
+  help := widgets.NewParagraph()
+  help.Title = "Keybinds: "
+  help.Text = helpWindowText
+
   var openAddTask = func() {
     tasks.SetRect(0, 0, termWidth, termHeight - newTaskHeight)
-    ui.Render(tasks, newTask) // Test if this can be removed
+    ui.Render(tasks, newTask, help)
     newTaskOpen = true
   }
 
   var closeAddTask = func() {
     tasks.SetRect(0, 0, termWidth, termHeight)
-    ui.Render(tasks) // Test if this can be removed
+    ui.Render(tasks, help) // Test if this can be removed
     newTaskOpen = false
   }
 
@@ -250,7 +285,7 @@ func main() {
     switch e.ID {
       case "<C-c>": // You should always be able to close the program at any time
         return      // with <C-c>
-    } // First renderer
+    } 
     if !newTaskOpen {
       // Task-view Inputs
       switch e.ID {
@@ -308,6 +343,10 @@ func main() {
         openAddTask();
       case "d", "x":
         removeTask();
+      case "?":
+        openHelp(termWidth, termHeight, help)
+      case "<Escape>":
+        closeHelp(help)
       }
       // used to help check for "gg"
       if previousKey == "g" {
@@ -359,8 +398,8 @@ func main() {
             cursorIndex++
           }
       }
-      ui.Render(newTask)
+      ui.Render(newTask, help)
     }
-    ui.Render(tasks)
+    ui.Render(tasks, help)
   }
 }
