@@ -18,11 +18,13 @@ const (
 	todosDir      = ".todos"
 	tasksFileName = "tasks.txt"
   defaultNewTaskText = "[ ](bg:white)"
+  newTaskHeight = 4
 )
 
 const (
   helpWindowText =  `
-    [a/i/o] Create new task below currently selected task
+    [i/o] Create new task below currently selected task
+    [a] Create new subtask
     [O] Create new task above currently selected task
     [x/d] Delete currently selected task
     [w] Write changes
@@ -32,6 +34,7 @@ const (
     [Escape] Close help window
   `
 )
+
 var fontColours = []string {
   "(fg:red)",
   "(fg:green)",
@@ -57,6 +60,12 @@ var initialTasks = []string {
 	"[10] ???",
 	"[11] profit",
 }
+
+type TodoType int64
+const (
+  Task TodoType = 0
+  Subtask TodoType = 1
+)
 
 func createDirIfNotExists() {
 	homeDir, _ := os.UserHomeDir()
@@ -168,6 +177,18 @@ func moveCursor(inputtedText string, indexOfNextChar int) (string) {
   return newString[:indexOfNextChar] + "[" + string(newString[indexOfNextChar]) + "](bg:white)" + newString[indexOfNextChar + 1:]
 }
 
+func openAddTask(termWidth int, termHeight int, tasks *widgets.List, newTask *widgets.Paragraph) { 
+  tasks.SetRect(0, 0, termWidth, termHeight - newTaskHeight)
+  ui.Render(tasks, newTask);
+  // newTaskOpen = true
+}
+
+func closeAddTask(termWidth int, termHeight int, tasks *widgets.List) {
+  tasks.SetRect(0, 0, termWidth, termHeight)
+  ui.Render(tasks)
+}
+
+
 func openHelp(termWidth int, termHeight int, helpWindow *widgets.Paragraph) {
   helpWindow.SetRect(termWidth / 8, termHeight / 8, (termWidth / 8) * 7, (termHeight / 8) * 7 )
   ui.Render(helpWindow)
@@ -178,18 +199,6 @@ func closeHelp(helpWindow *widgets.Paragraph) {
   ui.Render(helpWindow)
 }
   
-  // var openAddTask = func() {
-  //   tasks.SetRect(0, 0, termWidth, termHeight - newTaskHeight)
-  //   ui.Render(tasks, newTask) // Test if this can be removed
-  //   newTaskOpen = true
-  // }
-  //
-  // var closeAddTask = func() {
-  //   tasks.SetRect(0, 0, termWidth, termHeight)
-  //   ui.Render(tasks) // Test if this can be removed
-  //   newTaskOpen = false
-  // }
-
 func main() {
 	if err := ui.Init(); err != nil {
 		log.Fatalf("failed to initialize termui: %v", err)
@@ -199,7 +208,6 @@ func main() {
   termWidth, termHeight := ui.TerminalDimensions()
 
   newTaskOpen := false // Used to check which inputs should be handled
-	previousKey := "" // This is used for 'gg' binding for jumping to the first item
   newTaskIndex := 0 // 0 -> Below, -1 -> Above
   cursorIndex := 0
 	uiEvents := ui.PollEvents()
@@ -223,24 +231,11 @@ func main() {
   newTask := widgets.NewParagraph()
   newTask.Title = "Create a new task"
   newTask.Text = defaultNewTaskText 
-  newTaskHeight := 4
   newTask.SetRect(0, termHeight - newTaskHeight, termWidth, termHeight)
 
   help := widgets.NewParagraph()
   help.Title = "Keybinds: "
   help.Text = helpWindowText
-
-  var openAddTask = func() {
-    tasks.SetRect(0, 0, termWidth, termHeight - newTaskHeight)
-    ui.Render(tasks, newTask, help)
-    newTaskOpen = true
-  }
-
-  var closeAddTask = func() {
-    tasks.SetRect(0, 0, termWidth, termHeight)
-    ui.Render(tasks, help) // Test if this can be removed
-    newTaskOpen = false
-  }
 
   var updateStringIndex = func(index int) {
 		for i := index; i < len(tasks.Rows); i++ {
@@ -259,16 +254,27 @@ func main() {
     }
   }
 
-  var insertTask = func(offset int) { 
+  var insertTask = func(offset int, newTaskType TodoType) { 
   // Offset is for placing new task above/below the currently selected item
     if len(newTask.Text) > 0 {
       index := tasks.SelectedRow
       if len(tasks.Rows) == 0 {
         tasks.Rows = []string{"[0] " + newTask.Text}
         newTask.Text = defaultNewTaskText
-        closeAddTask()
+        closeAddTask(termWidth, termHeight, tasks)
       } else {
-        task := "[" + strconv.Itoa(index + 1 + offset) + "] " + removeCursor(newTask.Text)
+        // if newTaskType == Task {
+        //   tasks.Rows = []string{"[0] " + newTask.Text}
+        // }
+        // if newTaskType == Subtask {
+        //   tasks.Rows = []string{"[0]   └───" + newTask.Text}
+        // }
+        var task string
+        if newTaskType == Task {
+          task = "[" + strconv.Itoa(index + 1 + offset) + "] " + removeCursor(newTask.Text)
+        } else if newTaskType == Subtask {
+          task = "[" + strconv.Itoa(index + 1 + offset) + "] └─ " + removeCursor(newTask.Text)
+        }
         tasks.Rows = append(tasks.Rows[:index + 1 + offset], append([]string{task}, tasks.Rows[index + 1 + offset:]...)...)
       }
       newTask.Text = defaultNewTaskText
@@ -278,6 +284,9 @@ func main() {
 
   ui.Render(tasks) // Initial UI render
 
+	previousKey := "" // This is used for 'gg' binding for jumping to the first item
+
+  var newTaskType TodoType
   // Input handling
 	for {
 		e := <-uiEvents
@@ -335,12 +344,21 @@ func main() {
         if len(tasks.Rows) > 0 {
           tasks.ScrollBottom()
         }
-      case "a", "i", "o":
+      case "i", "o":
         newTaskIndex = 0;
-        openAddTask();
+        newTaskOpen = true
+        newTaskType = Task
+        openAddTask(termWidth, termHeight, tasks, newTask);
+      case "a":
+        newTaskIndex = 0;
+        newTaskOpen = true
+        newTaskType = Subtask
+        openAddTask(termWidth, termHeight, tasks, newTask);
       case "O":
         newTaskIndex = -1;
-        openAddTask();
+        newTaskOpen = true
+        newTaskType = Task
+        openAddTask(termWidth, termHeight, tasks, newTask);
       case "d", "x":
         removeTask();
       case "?":
@@ -360,7 +378,8 @@ func main() {
         case "<Escape>":
           if newTaskOpen {
             newTask.Text = defaultNewTaskText
-            closeAddTask();
+            newTaskOpen = false
+            closeAddTask(termWidth, termHeight, tasks)
             cursorIndex = 0
           }
         case "<Backspace>":
@@ -376,8 +395,9 @@ func main() {
           cursorIndex++
         case "<Enter>":
           if len(newTask.Text) > len(defaultNewTaskText) {
-            insertTask(newTaskIndex);
-            closeAddTask()
+            insertTask(newTaskIndex, newTaskType);
+            newTaskOpen = false
+            closeAddTask(termWidth, termHeight, tasks)
             cursorIndex = 0
           }
         case "<Left>":
