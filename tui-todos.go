@@ -26,6 +26,8 @@ const (
     [i/o] Create new task below currently selected task
     [a] Create new subtask
     [O] Create new task above currently selected task
+    [gg] Jump to first task in Todolist
+    [G] Jump to last task in Todolist
     [x/d] Delete currently selected task
     [w] Write changes
     [Tab] Cycle text colour of currently selected task
@@ -172,7 +174,6 @@ func moveCursor(inputtedText string, indexOfNextChar int) (string) {
   // this is insane
   // How can there be no built in TextInput widget built into termui?
   // Theres literally a pull request for it that's been sat there for 6+ years lol
-  // why do i have to make this schizo madman function
   newString := removeCursor(inputtedText)
   return newString[:indexOfNextChar] + "[" + string(newString[indexOfNextChar]) + "](bg:white)" + newString[indexOfNextChar + 1:]
 }
@@ -236,7 +237,27 @@ func insertTask(tasks *widgets.List, offset int, newTaskType TodoType, newTask *
     newTask.Text = defaultNewTaskText
     updateStringIndex(tasks, index + 1 + offset) // Not sure if doing the +1 is an optimisation or a slowdown lol
   }
+}
 
+func setupTasksWidget(tasks *widgets.List, todoItems []string, termWidth int, termHeight int) {
+  tasks.Title = "Tasks: "
+  tasks.Rows = todoItems
+	tasks.TextStyle = ui.NewStyle(ui.ColorYellow)
+	tasks.WrapText = true; 
+  tasks.SelectedRowStyle = ui.NewStyle(ui.ColorBlack, ui.ColorWhite)
+	tasks.SetRect(0, 0, termWidth, termHeight)
+	tasks.WrapText = true 
+}
+
+func setupNewTaskWidget(newTask *widgets.Paragraph, termWidth int, termHeight int) {
+  newTask.Title = "Create a new task"
+  newTask.Text = defaultNewTaskText 
+  newTask.SetRect(0, termHeight - newTaskHeight, termWidth, termHeight)
+}
+
+func setupHelpWidget(help *widgets.Paragraph, termWidth int, termHeight int) {
+  help.Title = "Keybinds: "
+  help.Text = helpWindowText
 }
 
 func main() {
@@ -247,41 +268,28 @@ func main() {
 
   termWidth, termHeight := ui.TerminalDimensions()
 
-  newTaskOpen := false // Used to check which inputs should be handled
-  newTaskIndex := 0 // 0 -> Below, -1 -> Above
-  cursorIndex := 0
-	uiEvents := ui.PollEvents()
-
   createDirIfNotExists()
-
   todoItems, err := loadTasks()
   if err != nil {
     fmt.Println("Error loading tasks:", err)
     return
   }
 	tasks := widgets.NewList()
-  tasks.Title = "Tasks: "
-  tasks.Rows = todoItems
-	tasks.TextStyle = ui.NewStyle(ui.ColorYellow)
-	tasks.WrapText = true; 
-  tasks.SelectedRowStyle = ui.NewStyle(ui.ColorBlack, ui.ColorWhite)
-	tasks.SetRect(0, 0, termWidth, termHeight)
-	tasks.WrapText = true 
+  setupTasksWidget(tasks, todoItems, termWidth, termHeight)
 
   newTask := widgets.NewParagraph()
-  newTask.Title = "Create a new task"
-  newTask.Text = defaultNewTaskText 
-  newTask.SetRect(0, termHeight - newTaskHeight, termWidth, termHeight)
+  setupNewTaskWidget(newTask, termWidth, termHeight)
 
-help := widgets.NewParagraph()
-help.Title = "Keybinds: "
-help.Text = helpWindowText
-
-
+  help := widgets.NewParagraph()
+  setupHelpWidget(help, termWidth, termHeight)
 
   ui.Render(tasks) // Initial UI render
 
 	previousKey := "" // This is used for 'gg' binding for jumping to the first item
+  newTaskOpen := false // Used to check which inputs should be handled
+  newTaskIndex := 0 // 0 -> Below, -1 -> Above
+  cursorIndex := 0
+	uiEvents := ui.PollEvents()
 
   var newTaskType TodoType
   // Input handling
