@@ -198,7 +198,47 @@ func closeHelp(helpWindow *widgets.Paragraph) {
   helpWindow.SetRect(0,0,0,0)
   ui.Render(helpWindow)
 }
-  
+
+func updateStringIndex(tasks *widgets.List, index int) () {
+  for i := index; i < len(tasks.Rows); i++ {
+    tasks.Rows[i] = "[" + strconv.Itoa(i) + "]" + tasks.Rows[i][strings.Index(tasks.Rows[i], "]") + 1:]
+  }
+}
+
+func removeTask(tasks *widgets.List, ) {
+  if len(tasks.Rows) > 0 && tasks.SelectedRow >= 0 && tasks.SelectedRow < len(tasks.Rows) {
+    index := tasks.SelectedRow
+    tasks.Rows = append(tasks.Rows[:tasks.SelectedRow], tasks.Rows[tasks.SelectedRow+1:]...)
+    if !(len(tasks.Rows) > tasks.SelectedRow) {
+      tasks.ScrollUp();
+    }
+    updateStringIndex(tasks, index)
+  }
+}
+
+func insertTask(tasks *widgets.List, offset int, newTaskType TodoType, newTask *widgets.Paragraph, termWidth int, termHeight int) {
+  // Offset is for placing new task above/below the currently selected item
+  if len(newTask.Text) > 0 {
+    index := tasks.SelectedRow
+    if len(tasks.Rows) == 0 {
+      tasks.Rows = []string{"[0] " + removeCursor(newTask.Text)}
+      newTask.Text = defaultNewTaskText
+      closeAddTask(termWidth, termHeight, tasks)
+    } else {
+      var task string
+      if newTaskType == Task {
+        task = "[" + strconv.Itoa(index + 1 + offset) + "] " + removeCursor(newTask.Text)
+      } else if newTaskType == Subtask {
+        task = "[" + strconv.Itoa(index + 1 + offset) + "] └─ " + removeCursor(newTask.Text)
+      }
+      tasks.Rows = append(tasks.Rows[:index + 1 + offset], append([]string{task}, tasks.Rows[index + 1 + offset:]...)...)
+    }
+    newTask.Text = defaultNewTaskText
+    updateStringIndex(tasks, index + 1 + offset) // Not sure if doing the +1 is an optimisation or a slowdown lol
+  }
+
+}
+
 func main() {
 	if err := ui.Init(); err != nil {
 		log.Fatalf("failed to initialize termui: %v", err)
@@ -233,54 +273,11 @@ func main() {
   newTask.Text = defaultNewTaskText 
   newTask.SetRect(0, termHeight - newTaskHeight, termWidth, termHeight)
 
-  help := widgets.NewParagraph()
-  help.Title = "Keybinds: "
-  help.Text = helpWindowText
+help := widgets.NewParagraph()
+help.Title = "Keybinds: "
+help.Text = helpWindowText
 
-  var updateStringIndex = func(index int) {
-		for i := index; i < len(tasks.Rows); i++ {
-			tasks.Rows[i] = "[" + strconv.Itoa(i) + "]" + tasks.Rows[i][strings.Index(tasks.Rows[i], "]")+1:]
-		}
-  }
 
-  var removeTask = func() {
-    if len(tasks.Rows) > 0 && tasks.SelectedRow >= 0 && tasks.SelectedRow < len(tasks.Rows) {
-      index := tasks.SelectedRow
-      tasks.Rows = append(tasks.Rows[:tasks.SelectedRow], tasks.Rows[tasks.SelectedRow+1:]...)
-      if !(len(tasks.Rows) > tasks.SelectedRow) {
-        tasks.ScrollUp();
-      }
-      updateStringIndex(index)
-    }
-  }
-
-  var insertTask = func(offset int, newTaskType TodoType) { 
-  // Offset is for placing new task above/below the currently selected item
-    if len(newTask.Text) > 0 {
-      index := tasks.SelectedRow
-      if len(tasks.Rows) == 0 {
-        tasks.Rows = []string{"[0] " + newTask.Text}
-        newTask.Text = defaultNewTaskText
-        closeAddTask(termWidth, termHeight, tasks)
-      } else {
-        // if newTaskType == Task {
-        //   tasks.Rows = []string{"[0] " + newTask.Text}
-        // }
-        // if newTaskType == Subtask {
-        //   tasks.Rows = []string{"[0]   └───" + newTask.Text}
-        // }
-        var task string
-        if newTaskType == Task {
-          task = "[" + strconv.Itoa(index + 1 + offset) + "] " + removeCursor(newTask.Text)
-        } else if newTaskType == Subtask {
-          task = "[" + strconv.Itoa(index + 1 + offset) + "] └─ " + removeCursor(newTask.Text)
-        }
-        tasks.Rows = append(tasks.Rows[:index + 1 + offset], append([]string{task}, tasks.Rows[index + 1 + offset:]...)...)
-      }
-      newTask.Text = defaultNewTaskText
-      updateStringIndex(index + 1 + offset) // Not sure if doing the +1 is an optimisation or a slowdown lol
-    }
-  }
 
   ui.Render(tasks) // Initial UI render
 
@@ -360,7 +357,7 @@ func main() {
         newTaskType = Task
         openAddTask(termWidth, termHeight, tasks, newTask);
       case "d", "x":
-        removeTask();
+        removeTask(tasks);
       case "?":
         openHelp(termWidth, termHeight, help)
       case "<Escape>":
@@ -395,7 +392,7 @@ func main() {
           cursorIndex++
         case "<Enter>":
           if len(newTask.Text) > len(defaultNewTaskText) {
-            insertTask(newTaskIndex, newTaskType);
+            insertTask(tasks,  newTaskIndex, newTaskType, newTask, termWidth, termHeight);
             newTaskOpen = false
             closeAddTask(termWidth, termHeight, tasks)
             cursorIndex = 0
